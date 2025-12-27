@@ -565,8 +565,22 @@ class BurpExtender(IBurpExtender, ITab, IMessageEditorController, IContextMenuFa
 
 
         def addRequestsToTab(e):
+            print("[DEBUG] addRequestsToTab called")
+            # FIX: Prevent Burp double-call bug
+            if hasattr(self, '_lastAddTime'):
+                import time
+                if time.time() - self._lastAddTime < 1:
+                    print("[DEBUG] Skipping duplicate call")
+                    return
+            import time
+            self._lastAddTime = time.time()
+            addedUrls = set()
             for messageInfo in messages:
                 requestInfo = self._helpers.analyzeRequest(messageInfo)
+                urlKey = str(requestInfo.getMethod()) + str(requestInfo.getUrl())
+                if urlKey in addedUrls:
+                    continue
+                addedUrls.add(urlKey)
                 name = str(requestInfo.getMethod()).ljust(8) + requestInfo.getUrl().getPath()
                 # Grab regex from response
                 regex = "^HTTP/1\\.1 200 OK"
@@ -3252,3 +3266,4 @@ class UserEntryData:
         self._token = token
         self._staticcsrf = staticcsrf
         return
+
