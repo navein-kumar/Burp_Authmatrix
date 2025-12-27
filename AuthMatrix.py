@@ -455,6 +455,7 @@ class BurpExtender(IBurpExtender, ITab, IMessageEditorController, IContextMenuFa
         self._saveButton = JButton("Save", actionPerformed=self.saveClick)
         self._loadButton = JButton("Load", actionPerformed=self.loadClick)
         self._clearButton = JButton("Clear", actionPerformed=self.clearClick)
+        self._exportButton = JButton("Export CSV", actionPerformed=self.exportClick)
 
         buttons.add(self._runButton)
         buttons.add(self._cancelButton)
@@ -476,6 +477,7 @@ class BurpExtender(IBurpExtender, ITab, IMessageEditorController, IContextMenuFa
         buttons.add(self._saveButton)
         buttons.add(self._loadButton)
         buttons.add(self._clearButton)
+        buttons.add(self._exportButton)
 
         # Top pane
         firstPane = JSplitPane(JSplitPane.VERTICAL_SPLIT,roleScrollPane,messageScrollPane)
@@ -767,6 +769,56 @@ class BurpExtender(IBurpExtender, ITab, IMessageEditorController, IContextMenuFa
             self._userTable.redrawTable()
             self._messageTable.redrawTable()
             self._chainTable.redrawTable()
+
+    def exportClick(self,e):
+        # Export results to CSV
+        from javax.swing import JFileChooser
+        from javax.swing.filechooser import FileNameExtensionFilter
+        fc = JFileChooser()
+        fc.setFileFilter(FileNameExtensionFilter("CSV Files", ["csv"]))
+        fc.setSelectedFile(java.io.File("authmatrix_results.csv"))
+        result = fc.showSaveDialog(self._splitpane)
+        if result == JFileChooser.APPROVE_OPTION:
+            filepath = fc.getSelectedFile().getPath()
+            if not filepath.endswith(".csv"):
+                filepath += ".csv"
+            try:
+                f = open(filepath, 'w')
+                # Header
+                headers = ["ID", "Method", "Request", "Regex"]
+                for role in self._db.arrayOfRoles:
+                    if not role._deleted:
+                        headers.append(role._name)
+                f.write(",".join(headers) + "\n")
+                # Data rows
+                for msg in self._db.getMessagesInOrderByRow():
+                    if msg._deleted:
+                        continue
+                    row = [str(msg._index)]
+                    reqInfo = self._helpers.analyzeRequest(msg._requestResponse)
+                    row.append(reqInfo.getMethod())
+                    row.append('"' + str(reqInfo.getUrl().getPath()) + '"')
+                    row.append('"' + str(msg._regex) + '"')
+                    # Role results
+                    for role in self._db.arrayOfRoles:
+                        if role._deleted:
+                            continue
+                        resValue = msg._roleResults.get(role._index, None)
+                        checkbox = msg._roles.get(role._index, False)
+                        if resValue is None:
+                            row.append("-")
+                        elif resValue:
+                            row.append("SECURE")
+                        elif checkbox:
+                            row.append("FALSE_POSITIVE")
+                        else:
+                            row.append("VULNERABLE")
+
+                    f.write(",".join(row) + "\n")
+                f.close()
+                JOptionPane.showMessageDialog(self._splitpane, "Exported to: " + filepath)
+            except Exception as ex:
+                JOptionPane.showMessageDialog(self._splitpane, "Export failed: " + str(ex))
 
     def clearClick(self,e):
         result = JOptionPane.showConfirmDialog(self._splitpane, "Clear AuthMatrix Configuration?", "Clear Config", JOptionPane.YES_NO_OPTION)
